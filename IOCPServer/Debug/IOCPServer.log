@@ -1,4 +1,0 @@
-﻿  IOCPModel.cpp
-e:\网络编程学习\iocpserver\iocpserver\iocpmodel.h(81): warning C4018: “<”: 有符号/无符号不匹配
-  IOCPServer.vcxproj -> E:\网络编程学习\IOCPServer\Debug\IOCPServer.exe
-  IOCPServer.vcxproj -> E:\网络编程学习\IOCPServer\Debug\IOCPServer.pdb (Partial PDB)
