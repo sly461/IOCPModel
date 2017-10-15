@@ -12,14 +12,18 @@ CIOCPModel::CIOCPModel()
 	 m_lpfnAcceptEx(nullptr),
 	 m_lpfnGetAcceptExSockAddrs(nullptr)
 {
+	//变量初始化
 	//初始化线程互斥量
 	InitializeCriticalSection(&m_csContextList);
 	//建立线程退出事件 默认无信号  不默认重置信号状态
 	m_hQuitEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	//设置服务器地址信息
-	m_serverAddr->sin_addr.S_un.S_addr = htonl(INADDR_ANY);
-	m_serverAddr->sin_family = AF_INET;
-	m_serverAddr->sin_port = DEFAULT_PORT;
+	m_serverAddr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
+	m_serverAddr.sin_family = AF_INET;
+	m_serverAddr.sin_port = DEFAULT_PORT;
+
+	//函数
+	Init();
 }
 
 
@@ -29,6 +33,14 @@ CIOCPModel::~CIOCPModel()
 
 DWORD WINAPI CIOCPModel::WorkerThreadFun(LPVOID lpParam)
 {
+	//获取参数
+	THREADPARAM_WORKER *pParam = (THREADPARAM_WORKER *)lpParam;
+	CIOCPModel * pIOCPModel = (CIOCPModel *)pParam->m_IOCPModel;
+	int nThreadNo = pParam->m_noThread;
+
+	printf("工作者线程启动，ID：%d\n", nThreadNo);
+
+
 	return 0;
 }
 
@@ -46,6 +58,10 @@ bool CIOCPModel::LoadSocketLab()
 
 bool CIOCPModel::Init()
 {
+	LoadSocketLab();
+	InitIOCP();
+	InitWorkerThread();
+	InitSocket();
 	return true;
 }
 
@@ -67,6 +83,9 @@ bool CIOCPModel::InitSocket()
 	// AcceptEx 和 GetAcceptExSockaddrs 的GUID，用于导出函数指针
 	GUID GuidAcceptEx = WSAID_ACCEPTEX;
 	GUID GuidGetAcceptExSockAddrs = WSAID_GETACCEPTEXSOCKADDRS;
+
+	// 生成用于监听的Socket的信息
+	m_pListenContext = new PER_SOCKET_CONTEXT;
 
 	//注意 需要用wsasocket建立
 	m_pListenContext->m_socket = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED);
@@ -165,6 +184,7 @@ bool CIOCPModel::InitWorkerThread()
 		param->m_noThread = i + 1;
 		m_phWorkerThreads[i] = CreateThread(0, 0, WorkerThreadFun, (LPVOID)param, 0, &nWorkerID);
 	}
+	Sleep(1);
 	printf("建立工作者线程 %d个\n", m_numThreads);
 
 
@@ -192,17 +212,59 @@ void CIOCPModel::DeInit()
 
 bool CIOCPModel::PostAccept(PPER_IO_CONTEXT p)
 {
+	assert(INVALID_SOCKET != m_pListenContext->m_socket);
+	
 
-	return false;
+	DWORD dwbytes = 0;
+	p->m_type = ACCEPT;
+	OVERLAPPED *olp = &p->m_overLapped;
+	WSABUF *wb = &p->m_wsaBuf;
+
+	//同时为以后新连入的客户端准备好socket 这是与accept最大的区别
+	p->m_socket = WSASocket(AF_INET,SOCK_STREAM,0,NULL,0,WSA_FLAG_OVERLAPPED);
+	if (INVALID_SOCKET == p->m_socket)
+	{
+		printf("创建用于accept的socket失败!错误码：%\n", WSAGetLastError());
+		return false;
+	}
+
+
+	//投递
+	if (false == m_lpfnAcceptEx(m_pListenContext->m_socket, p->m_socket, wb->buf, wb->len - 2 * (sizeof(sockaddr_in) + 16),
+		sizeof(sockaddr_in) + 16, sizeof(sockaddr_in) + 16, &dwbytes, olp))
+	{
+		if (WSA_IO_PENDING != WSAGetLastError())
+		{
+			printf("投递失败！错误码：%\n", WSAGetLastError());
+			return false;
+		}
+	}
+
+	return true;
 }
 
 bool CIOCPModel::PostRecv(PPER_IO_CONTEXT p)
 {
-	return false;
+	//重置
+	p->ResetBuf();
+
+	//初始化变量
+	DWORD dwFlags = 0;
+	DWORD dwBytes = 0;
+	WSABUF *wb = &p->m_wsaBuf;
+	OVERLAPPED *ol = &p->m_overLapped;
+
+	int retVal = WSARecv(p->m_socket, wb, 1, &dwBytes, &dwBytes, ol, NULL);
+	if (retVal == SOCKET_ERROR&&WSAGetLastError() != WSA_IO_PENDING)
+	{
+		printf("投递recv失败! 错误码：%d\n ", WSAGetLastError());
+		return false;
+	}
+	return true;
 }
 
 bool CIOCPModel::PostSend(PPER_IO_CONTEXT p)
 {
-	return false;
+	return true;
 }
 

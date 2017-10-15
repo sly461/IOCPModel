@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <assert.h>
 #include <MSWSock.h>
 using namespace std;
 #pragma comment(lib,"ws2_32.lib")
@@ -133,7 +134,7 @@ public:
 	~CIOCPModel();
 private:
 	int m_nPort;                                                //服务器端口
-	SOCKADDR_IN *m_serverAddr;                                  //服务器ip地址
+	SOCKADDR_IN m_serverAddr;                                  //服务器ip地址
 	int m_numThreads;                                           //线程个数
 	HANDLE m_hIOCP;                                             //完成端口句柄
 	HANDLE m_hQuitEvent;                                        //推出事件句柄
