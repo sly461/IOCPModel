@@ -8,6 +8,7 @@ int main()
 {
 	CIOCPModel IOCPServer;
 	IOCPServer.StartServer();
+	while (1);
     return 0;
 }
 

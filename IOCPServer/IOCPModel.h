@@ -142,7 +142,7 @@ private:
 	HANDLE m_hQuitEvent;                                        //推出事件句柄
 	HANDLE * m_phWorkerThreads;                                 //工作者线程句柄指针
 	CRITICAL_SECTION m_csContextList;                           //线程同步互斥量
-	vector<PPER_SOCKET_CONTEXT>m_clientSocketContextArray;              //所有客户端的SocketContext信息
+	vector<PPER_SOCKET_CONTEXT>m_clientSocketContextArray;      //所有客户端的SocketContext信息
 	PPER_SOCKET_CONTEXT m_pListenContext;                       //用于监听
 	LPFN_ACCEPTEX                m_lpfnAcceptEx;                // AcceptEx 和 GetAcceptExSockaddrs 的函数指针，用于调用这两个扩展函数
 	LPFN_GETACCEPTEXSOCKADDRS    m_lpfnGetAcceptExSockAddrs;

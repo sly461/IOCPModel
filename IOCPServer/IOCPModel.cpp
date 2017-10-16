@@ -377,7 +377,7 @@ void CIOCPModel::StopServer()
 		//清除所有客户端信息
 		ClearSocketContext();
 
-		printf("停止监听\n");
+		printf("停止监听！\n");
 		DeInit();
 		UnloadSocketLib();
 	}
@@ -394,7 +394,7 @@ bool CIOCPModel::IsSocketAlive(SOCKET s)
 bool CIOCPModel::PostAccept(PPER_IO_CONTEXT p)
 {
 	assert(INVALID_SOCKET != m_pListenContext->m_socket);
-	
+	p->ResetBuf();
 
 	DWORD dwbytes = 0;
 	p->m_type = ACCEPT;
@@ -451,8 +451,47 @@ bool CIOCPModel::PostSend(PPER_IO_CONTEXT p)
 
 bool CIOCPModel::DoAccept(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoContext)
 {
+	sockaddr_in *localAddr = nullptr;
+	sockaddr_in *remoteAddr = nullptr;
+	int remoteLen = sizeof(sockaddr_in);
+	int localLen = sizeof(sockaddr_in);
+	//不但可以取得客户端和本地端的地址信息，还能顺便取出客户端发来的第一组数据
+	m_lpfnGetAcceptExSockAddrs(pIoContext->m_wsaBuf.buf,
+		pIoContext->m_wsaBuf.len-2*(sizeof(sockaddr_in)+16),
+		sizeof(sockaddr_in) + 16, sizeof(sockaddr_in) + 16,
+		(LPSOCKADDR *)&localAddr,&localLen,(LPSOCKADDR *)&remoteAddr,&remoteLen);
+	printf("客户端 %s:%d 连入\n", inet_ntoa(remoteAddr->sin_addr), ntohs(remoteAddr->sin_port));
+	printf("客户端 %s:%d 信息:%s\n", inet_ntoa(remoteAddr->sin_addr), ntohs(remoteAddr->sin_port), pIoContext->m_wsaBuf.buf);
 
-	return true;
+	//创建新的客户端context
+	PPER_SOCKET_CONTEXT pNewSocketContext = new PER_SOCKET_CONTEXT;
+	pNewSocketContext->m_socket = pIoContext->m_socket;
+	pNewSocketContext->m_clientAddr = *remoteAddr;
+	//将新的socket绑定到完成端口上
+	HANDLE retVal = CreateIoCompletionPort((HANDLE)pNewSocketContext->m_socket, m_hIOCP, (DWORD)pNewSocketContext, 0);
+	if (NULL == retVal)
+	{
+		RELEASE(pNewSocketContext);
+		printf("执行CreateIoCompletionPort()出现错误.错误代码：%d", GetLastError());
+		return false;
+	}
+	//创建新客户端下的io数据
+	PPER_IO_CONTEXT pNewIoContext = pNewSocketContext->GetNewIOContext();
+	pNewIoContext->m_type = RECV;
+	pNewIoContext->m_socket = pNewIoContext->m_socket;
+
+	//开始投递
+	if (false == PostRecv(pIoContext))
+	{
+		pNewSocketContext->RemoveContext(pNewIoContext);
+		return false;
+	}
+
+	//投递成功 则将新的socket加入到socketcontext中去 统一管理
+	m_clientSocketContextArray.push_back(pNewSocketContext);
+
+	//继续在原socket上投递accept请求
+	return PostAccept(pIoContext);
 }
 
 bool CIOCPModel::DoSend(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoContext)
@@ -462,6 +501,10 @@ bool CIOCPModel::DoSend(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoC
 
 bool CIOCPModel::DoRecv(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoContext)
 {
+	sockaddr_in *clientAddr = &pSocketContext->m_clientAddr;
+	printf("收到 %s:%d  信息:%s\n",inet_ntoa(clientAddr->sin_addr),
+		ntohs(clientAddr->sin_port),pIoContext->m_wsaBuf.buf);
+	PostRecv(pIoContext);
 	return true;
 }
 
