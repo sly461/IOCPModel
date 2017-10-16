@@ -7,6 +7,7 @@
 int main()
 {
 	CIOCPModel IOCPServer;
+	IOCPServer.StartServer();
     return 0;
 }
 

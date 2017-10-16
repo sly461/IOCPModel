@@ -142,24 +142,40 @@ private:
 	HANDLE m_hQuitEvent;                                        //推出事件句柄
 	HANDLE * m_phWorkerThreads;                                 //工作者线程句柄指针
 	CRITICAL_SECTION m_csContextList;                           //线程同步互斥量
-	vector<PPER_IO_CONTEXT>m_clientIOContextArray;              //所有客户端的IOcontext信息
+	vector<PPER_SOCKET_CONTEXT>m_clientSocketContextArray;              //所有客户端的SocketContext信息
 	PPER_SOCKET_CONTEXT m_pListenContext;                       //用于监听
 	LPFN_ACCEPTEX                m_lpfnAcceptEx;                // AcceptEx 和 GetAcceptExSockaddrs 的函数指针，用于调用这两个扩展函数
 	LPFN_GETACCEPTEXSOCKADDRS    m_lpfnGetAcceptExSockAddrs;
 
 	static DWORD WINAPI WorkerThreadFun(LPVOID lpParam);        //线程函数
 
-	bool LoadSocketLab();                                       //加载套接字库
-	bool Init();                                                //初始化各种参数
+	bool LoadSocketLib();                                       //加载套接字库
+	void UnloadSocketLib() { WSACleanup(); }                    //卸载套接字库
 	bool InitIOCP();                                            //初始化完成端口
 	bool InitSocket();                                          //初始化socket
 	bool InitWorkerThread();                                    //初始化工作者线程
-
 	void DeInit();                                              //最后全部释放掉
+
 
 	bool PostAccept(PPER_IO_CONTEXT p);                         //投递accept io请求
 	bool PostRecv(PPER_IO_CONTEXT p);                           //投递recv io请求
 	bool PostSend(PPER_IO_CONTEXT p);                           //投递send io请求
+	                                                            //分别处理三种请求
+	bool DoAccept(PPER_SOCKET_CONTEXT pSocketContext,PPER_IO_CONTEXT pIoContext);
+	bool DoSend(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoContext);
+	bool DoRecv(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoContext);
+	                                                    
+	
+	void AddToSocketContextList(PPER_SOCKET_CONTEXT p);         //加入到socketcontext中去 统一管理
+	void RemoveSocketContext(PPER_SOCKET_CONTEXT p);            //从socketcontext中删掉
+	void ClearSocketContext();                                  //清除掉所有socketcontext的内容
 
+	bool IsSocketAlive(SOCKET s);                               //确认客户端是不是异常退出了
+	bool SolveHandleError(PPER_SOCKET_CONTEXT pSockeContext,const DWORD& dwErr);
+	                                                            //处理完成端口上的错误
+	
+public:
+	bool StartServer();                                         //启动服务器
+	void StopServer();                                          //关闭服务器                      
 };
 
