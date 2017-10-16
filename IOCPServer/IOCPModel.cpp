@@ -32,6 +32,7 @@ CIOCPModel::~CIOCPModel()
 	DeInit();
 }
 
+//线程函数
 DWORD WINAPI CIOCPModel::WorkerThreadFun(LPVOID lpParam)
 {
 	//获取参数
@@ -40,8 +41,28 @@ DWORD WINAPI CIOCPModel::WorkerThreadFun(LPVOID lpParam)
 	int nThreadNo = pParam->m_noThread;
 
 	printf("工作者线程启动，ID：%d\n", nThreadNo);
+	
+	OVERLAPPED *ol = nullptr;
+	PPER_SOCKET_CONTEXT pSocketContext = nullptr;
+	DWORD dwBytestransferred = 0;
 
+	//等待事件退出
+	while (WAIT_OBJECT_0 != WaitForSingleObject(pIOCPModel->m_hQuitEvent, 0))
+	{
+		bool retVal = GetQueuedCompletionStatus(pIOCPModel->m_hIOCP,&dwBytestransferred,
+			(PULONG_PTR)&pSocketContext,&ol,INFINITE);
+		if (EXIT_CODE == (DWORD)pSocketContext)
+		{
+			break;
+		}
+		//出现了错误
+		if (!retVal)
+		{
 
+		}
+	}
+
+	RELEASE(pParam);
 	return 0;
 }
 
@@ -60,16 +81,12 @@ bool CIOCPModel::LoadSocketLab()
 bool CIOCPModel::Init()
 {
 	bool retVal = LoadSocketLab();
-	printf("%d", retVal);
 	if (!retVal)return false;
 	retVal = InitIOCP();
-	printf("%d", retVal);
 	if (!retVal)return false;
 	retVal = InitWorkerThread();
-	printf("%d", retVal);
 	if (!retVal)return false;
 	retVal = InitSocket();
-	printf("%d", retVal);
 	if (!retVal)return false;
 	return true;
 }
@@ -193,7 +210,7 @@ bool CIOCPModel::InitWorkerThread()
 		param->m_noThread = i + 1;
 		m_phWorkerThreads[i] = CreateThread(0, 0, WorkerThreadFun, (LPVOID)param, 0, &nWorkerID);
 	}
-	Sleep(1);
+	Sleep(10);
 	printf("建立工作者线程 %d个\n", m_numThreads);
 
 

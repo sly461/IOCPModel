@@ -12,6 +12,7 @@ using namespace std;
 #define MAX_BUFFLEN   1024     //缓冲区最大长度
 #define DEFAULT_PORT  9990     //默认端口
 #define THREAD_PER_PROCESSOR 2 //一个处理器对应线程的数量
+#define EXIT_CODE NULL         //退出码
 
 
 #define RELEASE_SOCKET(x) {if((x)!=INVALID_SOCKET){closesocket(x);(x)=INVALID_SOCKET;}}
