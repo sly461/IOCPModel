@@ -97,13 +97,14 @@ typedef struct _PER_SOCKET_CONTEXT
 	//移除掉某一个io数据结构
 	void RemoveContext(PPER_IO_CONTEXT p)
 	{
+		assert(p != nullptr);
 		for (auto i = m_IOContextList.begin(); i != m_IOContextList.end();)
 		{
 			if (*i == p)
 			{
-				delete p;
-				p = nullptr;
-				i=m_IOContextList.erase(i);
+				delete (*i);
+				(*i) = p = nullptr;
+				i = m_IOContextList.erase(i);
 				break;
 			}
 			i++;

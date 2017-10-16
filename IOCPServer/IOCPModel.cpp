@@ -29,6 +29,7 @@ CIOCPModel::CIOCPModel()
 
 CIOCPModel::~CIOCPModel()
 {
+	DeInit();
 }
 
 DWORD WINAPI CIOCPModel::WorkerThreadFun(LPVOID lpParam)
@@ -58,10 +59,18 @@ bool CIOCPModel::LoadSocketLab()
 
 bool CIOCPModel::Init()
 {
-	LoadSocketLab();
-	InitIOCP();
-	InitWorkerThread();
-	InitSocket();
+	bool retVal = LoadSocketLab();
+	printf("%d", retVal);
+	if (!retVal)return false;
+	retVal = InitIOCP();
+	printf("%d", retVal);
+	if (!retVal)return false;
+	retVal = InitWorkerThread();
+	printf("%d", retVal);
+	if (!retVal)return false;
+	retVal = InitSocket();
+	printf("%d", retVal);
+	if (!retVal)return false;
 	return true;
 }
 
@@ -88,7 +97,7 @@ bool CIOCPModel::InitSocket()
 	m_pListenContext = new PER_SOCKET_CONTEXT;
 
 	//注意 需要用wsasocket建立
-	m_pListenContext->m_socket = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0, WSA_FLAG_OVERLAPPED);
+	m_pListenContext->m_socket = WSASocket(AF_INET, SOCK_STREAM,0, NULL, 0, WSA_FLAG_OVERLAPPED);
 	if (INVALID_SOCKET == m_pListenContext->m_socket)
 	{
 		printf("初始化socket失败！错误码：%d\n", WSAGetLastError());
@@ -175,7 +184,7 @@ bool CIOCPModel::InitWorkerThread()
 	int numOfProcessors = si.dwNumberOfProcessors;
 	m_numThreads = THREAD_PER_PROCESSOR*numOfProcessors;
 	//初始化线程
-	m_phWorkerThreads = new HANDLE[numOfProcessors];
+	m_phWorkerThreads = new HANDLE[m_numThreads];
 	DWORD nWorkerID;
 	for (int i = 0; i < m_numThreads; i++)
 	{
@@ -205,7 +214,7 @@ void CIOCPModel::DeInit()
 		RELEASE_HANDLE(m_phWorkerThreads[i]);
 	}
 	//删除
-	delete[m_numThreads]m_phWorkerThreads;
+	delete[] m_phWorkerThreads;
 
 	printf("释放资源完毕！\n");
 }
