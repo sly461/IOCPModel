@@ -337,7 +337,7 @@ bool CIOCPModel::StartServer()
 	//设置服务器地址信息
 	m_serverAddr.sin_addr.S_un.S_addr = htonl(INADDR_ANY);
 	m_serverAddr.sin_family = AF_INET;
-	m_serverAddr.sin_port = DEFAULT_PORT;
+	m_serverAddr.sin_port = htons(m_nPort);
 
 	if (false == InitIOCP())
 	{
@@ -478,10 +478,10 @@ bool CIOCPModel::DoAccept(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pI
 	//创建新客户端下的io数据
 	PPER_IO_CONTEXT pNewIoContext = pNewSocketContext->GetNewIOContext();
 	pNewIoContext->m_type = RECV;
-	pNewIoContext->m_socket = pNewIoContext->m_socket;
+	pNewIoContext->m_socket = pNewSocketContext->m_socket;
 
 	//开始投递
-	if (false == PostRecv(pIoContext))
+	if (false == PostRecv(pNewIoContext))
 	{
 		pNewSocketContext->RemoveContext(pNewIoContext);
 		return false;
