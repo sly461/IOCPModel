@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <string.h>
 #include <assert.h>
 #include <MSWSock.h>
 using namespace std;

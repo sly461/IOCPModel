@@ -139,19 +139,13 @@ bool CIOCPModel::InitSocket()
 	m_pListenContext = new PER_SOCKET_CONTEXT;
 
 	//注意 需要用wsasocket建立
-	m_pListenContext->m_socket = WSASocket(AF_INET, SOCK_STREAM,0, NULL, 0, WSA_FLAG_OVERLAPPED);
+	m_pListenContext->m_socket = WSASocket(AF_INET, SOCK_STREAM,IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
 	if (INVALID_SOCKET == m_pListenContext->m_socket)
 	{
 		printf("初始化socket失败！错误码：%d\n", WSAGetLastError());
 		return false;
 	}
-	//绑定到服务器地址
-	if (SOCKET_ERROR==bind(m_pListenContext->m_socket, (sockaddr *)&m_serverAddr, sizeof(m_serverAddr)))
-	{
-		printf("bind()函数执行错误！\n");
-		RELEASE_SOCKET(m_pListenContext->m_socket);
-		return false;
-	}
+	
 	//绑定至完成端口
 	if (NULL == CreateIoCompletionPort((HANDLE)m_pListenContext->m_socket, m_hIOCP, (DWORD)m_pListenContext,0))
 	{
@@ -159,6 +153,15 @@ bool CIOCPModel::InitSocket()
 		RELEASE_SOCKET(m_pListenContext->m_socket);
 		return false;
 	}
+	//绑定到服务器地址
+	if (SOCKET_ERROR == bind(m_pListenContext->m_socket, (sockaddr *)&m_serverAddr, sizeof(m_serverAddr)))
+	{
+		printf("bind()函数执行错误！\n");
+		RELEASE_SOCKET(m_pListenContext->m_socket);
+		return false;
+	}
+
+
 	//开始监听
 	if (SOCKET_ERROR == listen(m_pListenContext->m_socket, 10))
 	{
@@ -394,7 +397,6 @@ bool CIOCPModel::IsSocketAlive(SOCKET s)
 bool CIOCPModel::PostAccept(PPER_IO_CONTEXT p)
 {
 	assert(INVALID_SOCKET != m_pListenContext->m_socket);
-	p->ResetBuf();
 
 	DWORD dwbytes = 0;
 	p->m_type = ACCEPT;
@@ -402,7 +404,7 @@ bool CIOCPModel::PostAccept(PPER_IO_CONTEXT p)
 	WSABUF *wb = &p->m_wsaBuf;
 
 	//同时为以后新连入的客户端准备好socket 这是与accept最大的区别
-	p->m_socket = WSASocket(AF_INET,SOCK_STREAM,0,NULL,0,WSA_FLAG_OVERLAPPED);
+	p->m_socket = WSASocket(AF_INET,SOCK_STREAM,IPPROTO_TCP,NULL,0,WSA_FLAG_OVERLAPPED);
 	if (INVALID_SOCKET == p->m_socket)
 	{
 		printf("创建用于accept的socket失败!错误码：%\n", WSAGetLastError());
@@ -426,14 +428,17 @@ bool CIOCPModel::PostAccept(PPER_IO_CONTEXT p)
 
 bool CIOCPModel::PostRecv(PPER_IO_CONTEXT p)
 {
-	//重置
-	p->ResetBuf();
+	
 
 	//初始化变量
 	DWORD dwFlags = 0;
 	DWORD dwBytes = 0;
 	WSABUF *wb = &p->m_wsaBuf;
 	OVERLAPPED *ol = &p->m_overLapped;
+
+	//重置
+	p->ResetBuf();
+	p->m_type = RECV;
 
 	int retVal = WSARecv(p->m_socket, wb, 1, &dwBytes, &dwBytes, ol, NULL);
 	if (retVal == SOCKET_ERROR&&WSAGetLastError() != WSA_IO_PENDING)
@@ -460,13 +465,17 @@ bool CIOCPModel::DoAccept(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pI
 		pIoContext->m_wsaBuf.len-2*(sizeof(sockaddr_in)+16),
 		sizeof(sockaddr_in) + 16, sizeof(sockaddr_in) + 16,
 		(LPSOCKADDR *)&localAddr,&localLen,(LPSOCKADDR *)&remoteAddr,&remoteLen);
-	printf("客户端 %s:%d 连入\n", inet_ntoa(remoteAddr->sin_addr), ntohs(remoteAddr->sin_port));
-	printf("客户端 %s:%d 信息:%s\n", inet_ntoa(remoteAddr->sin_addr), ntohs(remoteAddr->sin_port), pIoContext->m_wsaBuf.buf);
+	
 
 	//创建新的客户端context
 	PPER_SOCKET_CONTEXT pNewSocketContext = new PER_SOCKET_CONTEXT;
 	pNewSocketContext->m_socket = pIoContext->m_socket;
-	pNewSocketContext->m_clientAddr = *remoteAddr;
+	memcpy(&(pNewSocketContext->m_clientAddr), remoteAddr, sizeof(SOCKADDR_IN));
+
+
+	printf("客户端 %s:%d 连入\n", inet_ntoa(pNewSocketContext->m_clientAddr.sin_addr), ntohs(pNewSocketContext->m_clientAddr.sin_port));
+	printf("客户端 %s:%d 信息:%s\n", inet_ntoa(pNewSocketContext->m_clientAddr.sin_addr), ntohs(pNewSocketContext->m_clientAddr.sin_port), pIoContext->m_wsaBuf.buf);
+
 	//将新的socket绑定到完成端口上
 	HANDLE retVal = CreateIoCompletionPort((HANDLE)pNewSocketContext->m_socket, m_hIOCP, (DWORD)pNewSocketContext, 0);
 	if (NULL == retVal)
@@ -501,10 +510,9 @@ bool CIOCPModel::DoSend(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoC
 
 bool CIOCPModel::DoRecv(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoContext)
 {
-	sockaddr_in *clientAddr = &pSocketContext->m_clientAddr;
-	printf("收到 %s:%d  信息:%s\n",inet_ntoa(clientAddr->sin_addr),
-		ntohs(clientAddr->sin_port),pIoContext->m_wsaBuf.buf);
-	PostRecv(pIoContext);
-	return true;
+	sockaddr_in clientAddr = pSocketContext->m_clientAddr;
+	printf("收到 %s:%d  信息:%s\n", inet_ntoa(clientAddr.sin_addr),
+		ntohs(clientAddr.sin_port), pIoContext->m_wsaBuf.buf);
+	return PostRecv(pIoContext);
 }
 
