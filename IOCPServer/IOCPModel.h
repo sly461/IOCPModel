@@ -174,7 +174,8 @@ private:
 	bool DoAccept(PPER_SOCKET_CONTEXT pSocketContext,PPER_IO_CONTEXT pIoContext);
 	bool DoSend(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoContext);
 	bool DoRecv(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoContext);
-	                                                    
+	bool DoAccept_Connect(PPER_IO_CONTEXT pIoContext);
+	bool DoAccept_GetFirstData(PPER_IO_CONTEXT pIoContext);
 	
 	void AddToSocketContextList(PPER_SOCKET_CONTEXT p);         //加入到socketcontext中去 统一管理
 	void RemoveSocketContext(PPER_SOCKET_CONTEXT p);            //从socketcontext中删掉
