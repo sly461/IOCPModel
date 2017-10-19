@@ -77,16 +77,29 @@ DWORD WINAPI CIOCPModel::WorkerThreadFun(LPVOID lpParam)
 				{
 				case ACCEPT:
 					{
+						pIoContext->m_numBytesTotal = dwBytestransferred;
 						pIOCPModel->DoAccept(pSocketContext,pIoContext);
 					}
 					break;
 				case SEND:
 					{
-						pIOCPModel->DoSend(pSocketContext, pIoContext);
+						pIoContext->m_numBytesSend += dwBytestransferred;
+						if (pIoContext->m_numBytesSend < pIoContext->m_numBytesTotal)
+						{
+							//数据未能发送完，继续发送数据
+							pIoContext->m_wsaBuf.buf = pIoContext->m_buffer + pIoContext->m_numBytesSend;
+							pIoContext->m_wsaBuf.len = pIoContext->m_numBytesTotal - pIoContext->m_numBytesSend;
+							pIOCPModel->PostSend(pIoContext);
+						}
+						else
+						{
+							pIOCPModel->PostRecv(pIoContext);
+						}
 					}
 					break;
 				case RECV:
 					{
+						pIoContext->m_numBytesTotal = dwBytestransferred;
 						pIOCPModel->DoRecv(pSocketContext, pIoContext);
 					}
 					break;
@@ -139,7 +152,7 @@ bool CIOCPModel::InitSocket()
 	m_pListenContext = new PER_SOCKET_CONTEXT;
 
 	//注意 需要用wsasocket建立
-	m_pListenContext->m_socket = WSASocket(AF_INET, SOCK_STREAM,IPPROTO_TCP, NULL, 0, WSA_FLAG_OVERLAPPED);
+	m_pListenContext->m_socket = WSASocket(AF_INET, SOCK_STREAM,0, NULL, 0, WSA_FLAG_OVERLAPPED);
 	if (INVALID_SOCKET == m_pListenContext->m_socket)
 	{
 		printf("初始化socket失败！错误码：%d\n", WSAGetLastError());
@@ -404,7 +417,7 @@ bool CIOCPModel::PostAccept(PPER_IO_CONTEXT p)
 	WSABUF *wb = &p->m_wsaBuf;
 
 	//同时为以后新连入的客户端准备好socket 这是与accept最大的区别
-	p->m_socket = WSASocket(AF_INET,SOCK_STREAM,IPPROTO_TCP,NULL,0,WSA_FLAG_OVERLAPPED);
+	p->m_socket = WSASocket(AF_INET,SOCK_STREAM,0,NULL,0,WSA_FLAG_OVERLAPPED);
 	if (INVALID_SOCKET == p->m_socket)
 	{
 		printf("创建用于accept的socket失败!错误码：%\n", WSAGetLastError());
@@ -440,7 +453,7 @@ bool CIOCPModel::PostRecv(PPER_IO_CONTEXT p)
 	p->ResetBuf();
 	p->m_type = RECV;
 
-	int retVal = WSARecv(p->m_socket, wb, 1, &dwBytes, &dwBytes, ol, NULL);
+	int retVal = WSARecv(p->m_socket, wb, 1, &dwBytes,&dwFlags, ol, NULL);
 	if (retVal == SOCKET_ERROR&&WSAGetLastError() != WSA_IO_PENDING)
 	{
 		printf("投递recv失败! 错误码：%d\n ", WSAGetLastError());
@@ -451,11 +464,26 @@ bool CIOCPModel::PostRecv(PPER_IO_CONTEXT p)
 
 bool CIOCPModel::PostSend(PPER_IO_CONTEXT p)
 {
+	//初始化变量
+	DWORD dwFlags = 0;
+	DWORD dwBytes = 0;
+	WSABUF *wb = &p->m_wsaBuf;
+	OVERLAPPED *ol = &p->m_overLapped;
+
+
+	int retVal = WSASend(p->m_socket, wb, 1, &dwBytes, dwFlags, ol, NULL);
+	if (retVal == SOCKET_ERROR&&WSAGetLastError() != WSA_IO_PENDING)
+	{
+		printf("投递Send失败! 错误码：%d\n ", WSAGetLastError());
+		return false;
+	}
+
 	return true;
 }
 
 bool CIOCPModel::DoAccept(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoContext)
 {
+
 	sockaddr_in *localAddr = nullptr;
 	sockaddr_in *remoteAddr = nullptr;
 	int remoteLen = sizeof(sockaddr_in);
@@ -484,6 +512,22 @@ bool CIOCPModel::DoAccept(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pI
 		printf("执行CreateIoCompletionPort()出现错误.错误代码：%d", GetLastError());
 		return false;
 	}
+
+	//回传机制
+	PPER_IO_CONTEXT pNewSendContext = pNewSocketContext->GetNewIOContext();
+	pNewSendContext->m_type = SEND;
+	pNewSendContext->m_numBytesTotal = pIoContext->m_numBytesTotal;
+	pNewSendContext->m_socket = pNewSocketContext->m_socket;
+	pNewSendContext->m_wsaBuf.len=pIoContext->m_numBytesSend;
+	strcpy(pNewSendContext->m_buffer, pIoContext->m_buffer);
+	if (false == PostSend(pNewSendContext))
+	{
+		pNewSocketContext->RemoveContext(pNewSendContext);
+		return false;
+	}
+
+
+
 	//创建新客户端下的io数据
 	PPER_IO_CONTEXT pNewIoContext = pNewSocketContext->GetNewIOContext();
 	pNewIoContext->m_type = RECV;
@@ -499,6 +543,9 @@ bool CIOCPModel::DoAccept(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pI
 	//投递成功 则将新的socket加入到socketcontext中去 统一管理
 	m_clientSocketContextArray.push_back(pNewSocketContext);
 
+	
+	
+	pIoContext->ResetBuf();
 	//继续在原socket上投递accept请求
 	return PostAccept(pIoContext);
 }
@@ -513,6 +560,13 @@ bool CIOCPModel::DoRecv(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pIoC
 	sockaddr_in clientAddr = pSocketContext->m_clientAddr;
 	printf("收到 %s:%d  信息:%s\n", inet_ntoa(clientAddr.sin_addr),
 		ntohs(clientAddr.sin_port), pIoContext->m_wsaBuf.buf);
-	return PostRecv(pIoContext);
+
+	
+
+	//发送数据
+	pIoContext->m_numBytesSend = 0;
+	pIoContext->m_wsaBuf.len = pIoContext->m_numBytesTotal;
+	pIoContext->m_wsaBuf.buf = pIoContext->m_buffer;
+	return PostSend(pIoContext);
 }
 

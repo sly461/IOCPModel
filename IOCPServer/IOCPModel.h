@@ -10,7 +10,7 @@ using namespace std;
 #pragma comment(lib,"ws2_32.lib")
 
 #define MAX_POST_ACCEPT 10     //初始投递Accept请求的个数
-#define MAX_BUFFLEN   1024     //缓冲区最大长度
+#define MAX_BUFFLEN   8192     //缓冲区最大长度
 #define DEFAULT_PORT  9990     //默认端口
 #define THREAD_PER_PROCESSOR 2 //一个处理器对应线程的数量
 #define EXIT_CODE NULL         //退出码
@@ -38,6 +38,10 @@ typedef struct _PER_IO_CONTEXT
 	OPERATION_TYPE m_type;            //操作类型
 	SOCKET m_socket;                  //socket
 	WSABUF m_wsaBuf;                  //字符缓冲区
+
+	int m_numBytesTotal;              //发送的字节数和收到的字节数
+	int m_numBytesSend;              
+
 	char m_buffer[MAX_BUFFLEN];       
 
 	_PER_IO_CONTEXT()
@@ -48,12 +52,17 @@ typedef struct _PER_IO_CONTEXT
 		memset(m_buffer, 0, sizeof(m_buffer));
 		m_wsaBuf.buf = m_buffer;
 		m_wsaBuf.len = MAX_BUFFLEN;
+
+		m_numBytesSend = 0;
+		m_numBytesTotal = 0;
 	}
 
 	//重置buf
 	void ResetBuf()
 	{
 		memset(m_buffer, 0, sizeof(m_buffer));
+		m_wsaBuf.buf = m_buffer;
+		m_wsaBuf.len = MAX_BUFFLEN;
 	}
 
 }PER_IO_CONTEXT,*PPER_IO_CONTEXT;
