@@ -469,6 +469,8 @@ bool CIOCPModel::PostSend(PPER_IO_CONTEXT p)
 	DWORD dwBytes = 0;
 	WSABUF *wb = &p->m_wsaBuf;
 	OVERLAPPED *ol = &p->m_overLapped;
+	
+	p->m_type = SEND;
 
 
 	int retVal = WSASend(p->m_socket, wb, 1, &dwBytes, dwFlags, ol, NULL);
@@ -590,18 +592,20 @@ bool CIOCPModel::DoAccept_GetFirstData(PPER_IO_CONTEXT pIoContext)
 	}
 
 	//回传机制
-	PPER_IO_CONTEXT pNewSendContext = pNewSocketContext->GetNewIOContext();
-	pNewSendContext->m_type = SEND;
-	pNewSendContext->m_numBytesSend = 0;
-	pNewSendContext->m_numBytesTotal = pIoContext->m_numBytesTotal;
-	pNewSendContext->m_socket = pNewSocketContext->m_socket;
-	pNewSendContext->m_wsaBuf.len = pIoContext->m_numBytesTotal;
-	memcpy(pNewSendContext->m_buffer, pIoContext->m_buffer,pIoContext->m_numBytesTotal);
-	if (false == PostSend(pNewSendContext))
+	PPER_IO_CONTEXT pNewIoContext = pNewSocketContext->GetNewIOContext();
+	pNewIoContext->m_type = SEND;
+	pNewIoContext->m_numBytesSend = 0;
+	pNewIoContext->m_numBytesTotal = pIoContext->m_numBytesTotal;
+	pNewIoContext->m_socket = pNewSocketContext->m_socket;
+	pNewIoContext->m_wsaBuf.len = pIoContext->m_numBytesTotal;
+	memcpy(pNewIoContext->m_wsaBuf.buf, pIoContext->m_wsaBuf.buf,pIoContext->m_numBytesTotal);
+	if (false == PostSend(pNewIoContext))
 	{
-		pNewSocketContext->RemoveContext(pNewSendContext);
+		pNewSocketContext->RemoveContext(pNewIoContext);
 		return false;
 	}
+	//投递成功 则将新的socket加入到socketcontext中去 统一管理
+	m_clientSocketContextArray.push_back(pNewSocketContext);
 	return true;
 }
 
