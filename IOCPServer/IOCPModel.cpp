@@ -488,12 +488,14 @@ bool CIOCPModel::DoAccept(PPER_SOCKET_CONTEXT pSocketContext, PPER_IO_CONTEXT pI
 	//取得第一次数据
 	if (pIoContext->m_numBytesTotal > 0)
 	{
+		printf("取得第一次数据\n");
 		DoAccept_GetFirstData(pIoContext);
 	}
 	//连接
 	else
 	{
-		DoAccept_Connect(pIoContext);
+		//printf("连接shfkjsahjdfasjdkf\n");
+		//DoAccept_Connect(pIoContext);
 	}
 	
 
